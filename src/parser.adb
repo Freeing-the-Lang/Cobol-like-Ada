@@ -1,96 +1,126 @@
-with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
+with Lexer;
 with AST;
 
 package body Parser is
 
+   Tok : Lexer.Token_List;
    Pos : Natural := 1;
-   Tok : Token_List;
 
-   function Peek return Token is
+   -- 안전 Peek
+   function Peek return Lexer.Token is
    begin
       return Tok(Pos);
-   end;
+   end Peek;
 
-   function Advance return Token is
-      T : Token := Tok(Pos);
+   -- 안전 Advance
+   function Advance return Lexer.Token is
+      T : Lexer.Token := Tok(Pos);
    begin
       Pos := Pos + 1;
       return T;
-   end;
+   end Advance;
 
+   -------------------------------------------------------------
+   --  Expression Parser
+   -------------------------------------------------------------
    function Parse_Expr return AST.Expr is
-      T : Token := Advance;
-      E : AST.Expr;
+      T   : Lexer.Token := Advance;
+      E   : AST.Expr;
    begin
       case T.Kind is
 
-         when Number_Lit =>
-            E.Kind  := Number;
+         -----------------------------------------------------
+         -- Number literal
+         -----------------------------------------------------
+         when Lexer.Number_Lit =>
+            E.Kind  := AST.Number;
             E.Value := T.Text;
 
-         when String_Lit =>
-            E.Kind  := String_Lit;
+         -----------------------------------------------------
+         -- String literal
+         -----------------------------------------------------
+         when Lexer.String_Lit =>
+            E.Kind  := AST.String_Lit;
             E.Value := T.Text;
 
-         when Ident =>
-            E.Kind := Ident;
+         -----------------------------------------------------
+         -- Identifier (may become call)
+         -----------------------------------------------------
+         when Lexer.Ident =>
+            E.Kind := AST.Ident;
             E.Name := T.Text;
 
-            if Peek.Kind = LParen then
-               Advance; -- (
+            -- CALL syntax: IDENT(expr, expr, ...)
+            if Peek.Kind = Lexer.LParen then
+               Advance; -- '('
+
                declare
                   Count : Natural := 0;
                begin
-                  while Peek.Kind /= RParen loop
+                  while Peek.Kind /= Lexer.RParen loop
                      E.Args(Count) := new AST.Expr'(Parse_Expr);
                      Count := Count + 1;
-
-                     exit when Peek.Kind /= Comma;
-                     Advance;
+                     exit when Peek.Kind /= Lexer.Comma;
+                     Advance; -- comma
                   end loop;
 
                   E.Arg_Count := Count;
-                  Advance; -- )
+                  Advance; -- ')'
+                  E.Kind := AST.Call_Expr;
                end;
-               E.Kind := Call_Expr;
             end if;
 
          when others =>
             null;
-
       end case;
 
       return E;
    end Parse_Expr;
 
+   -------------------------------------------------------------
+   --  Statement Parser
+   -------------------------------------------------------------
    function Parse_Stmt return AST.Stmt is
       S : AST.Stmt;
-      T : Token := Peek;
+      T : Lexer.Token := Peek;
    begin
-      if T.Kind = Ident and then To_String(T.Text) = "DISPLAY" then
-         Advance;
-         S.Kind := Display_Stmt;
+      ----------------------------------------------------------
+      -- DISPLAY <expr>
+      ----------------------------------------------------------
+      if T.Kind = Lexer.Ident
+        and then To_String(T.Text) = "DISPLAY"
+      then
+         Advance; -- consume DISPLAY
+         S.Kind := AST.Display_Stmt;
          S.Expr_Node := Parse_Expr;
+
+      ----------------------------------------------------------
+      -- Fallback: treat as call-level stmt
+      ----------------------------------------------------------
       else
-         S.Kind := Call_Stmt;
+         S.Kind := AST.Call_Stmt;
          S.Expr_Node := Parse_Expr;
       end if;
-      return S;
-   end;
 
-   function Parse_Program(Tokens : Token_List) return AST.Program is
+      return S;
+   end Parse_Stmt;
+
+   -------------------------------------------------------------
+   --  Program Parser
+   -------------------------------------------------------------
+   function Parse_Program(Tokens : Lexer.Token_List) return Program_Type is
       P : AST.Program;
    begin
       Tok := Tokens;
       Pos := 1;
 
-      while Peek.Kind /= EOF_Token loop
+      while Peek.Kind /= Lexer.EOF_Token loop
          P.Stmts(P.Count) := new AST.Stmt'(Parse_Stmt);
          P.Count := P.Count + 1;
       end loop;
 
-      return P;
-   end;
+      return Program_Type(P);
+   end Parse_Program;
 
 end Parser;

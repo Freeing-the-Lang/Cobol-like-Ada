@@ -40,9 +40,8 @@ package body Parser is
             E.Kind := AST.Ident;
             E.Name := T.Text;
 
-            -- If IDENT( ... ) => Call
             if Peek.Kind = Lexer.LParen then
-               Advance; -- '('
+               Advance;
                declare
                   Count : Natural := 0;
                begin
@@ -51,11 +50,11 @@ package body Parser is
                      Count := Count + 1;
 
                      exit when Peek.Kind /= Lexer.Comma;
-                     Advance; -- comma
+                     Advance;
                   end loop;
 
                   E.Arg_Count := Count;
-                  Advance; -- ')'
+                  Advance;
                   E.Kind := AST.Call_Expr;
                end;
             end if;
@@ -63,7 +62,6 @@ package body Parser is
          when others =>
             null;
       end case;
-
       return E;
    end Parse_Expr;
 
@@ -74,11 +72,10 @@ package body Parser is
       S : AST.Stmt;
       T : Lexer.Token := Peek;
    begin
-      -- DISPLAY <expr>
       if T.Kind = Lexer.Ident
         and then To_String(T.Text) = "DISPLAY"
       then
-         Advance; -- consume DISPLAY
+         Advance;
          S.Kind := AST.Display_Stmt;
          S.Expr_Node := Parse_Expr;
 
@@ -91,9 +88,9 @@ package body Parser is
    end Parse_Stmt;
 
    -------------------------------------------------------------
-   -- Program
+   -- Program parsing
    -------------------------------------------------------------
-   function Parse_Program(Tokens : Lexer.Token_List) return Program_Type is
+   function Parse_Program(Tokens : Lexer.Token_List) return AST.Program is
       P : AST.Program;
    begin
       Tok := Tokens;
@@ -104,7 +101,7 @@ package body Parser is
          P.Count := P.Count + 1;
       end loop;
 
-      return Program_Type(P);
+      return P;
    end Parse_Program;
 
 end Parser;

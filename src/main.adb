@@ -7,21 +7,30 @@ procedure Main is
    Source : String := "";
    File   : File_Type;
 begin
+   -- 읽기
+   if Is_Open(File) then
+      Close(File);
+   end if;
+
    Open(File, In_File, "example.coba");
+
    while not End_Of_File(File) loop
       declare
-         L : constant String := Get_Line(File);
+         Line : constant String := Get_Line(File);
       begin
-         Source := Source & ASCII.LF & L;
+         -- 안전한 문자열 누적 방식
+         Source := Source & ASCII.LF & Line;
       end;
    end loop;
+
    Close(File);
 
+   -- 파싱
    declare
       Tokens : constant Lexer.Token_List := Lexer.Tokenize(Source);
-      Prog   : constant AST.Program      := Parser.Parse_Program(Tokens);
+      P      : constant Parser.Program_Type := Parser.Parse_Program(Tokens);
    begin
-      Runtime.Exec(Prog);
+      Runtime.Exec(P);
    end;
 
 end Main;

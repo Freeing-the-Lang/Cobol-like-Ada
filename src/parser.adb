@@ -7,13 +7,11 @@ package body Parser is
    Tok : Lexer.Token_List;
    Pos : Natural := 1;
 
-   -- 안전 Peek
    function Peek return Lexer.Token is
    begin
       return Tok(Pos);
    end Peek;
 
-   -- 안전 Advance
    function Advance return Lexer.Token is
       T : Lexer.Token := Tok(Pos);
    begin
@@ -22,7 +20,7 @@ package body Parser is
    end Advance;
 
    -------------------------------------------------------------
-   --  Expression Parser
+   -- Expression parsing
    -------------------------------------------------------------
    function Parse_Expr return AST.Expr is
       T   : Lexer.Token := Advance;
@@ -30,37 +28,28 @@ package body Parser is
    begin
       case T.Kind is
 
-         -----------------------------------------------------
-         -- Number literal
-         -----------------------------------------------------
          when Lexer.Number_Lit =>
             E.Kind  := AST.Number;
             E.Value := T.Text;
 
-         -----------------------------------------------------
-         -- String literal
-         -----------------------------------------------------
          when Lexer.String_Lit =>
             E.Kind  := AST.String_Lit;
             E.Value := T.Text;
 
-         -----------------------------------------------------
-         -- Identifier (may become call)
-         -----------------------------------------------------
          when Lexer.Ident =>
             E.Kind := AST.Ident;
             E.Name := T.Text;
 
-            -- CALL syntax: IDENT(expr, expr, ...)
+            -- If IDENT( ... ) => Call
             if Peek.Kind = Lexer.LParen then
                Advance; -- '('
-
                declare
                   Count : Natural := 0;
                begin
                   while Peek.Kind /= Lexer.RParen loop
                      E.Args(Count) := new AST.Expr'(Parse_Expr);
                      Count := Count + 1;
+
                      exit when Peek.Kind /= Lexer.Comma;
                      Advance; -- comma
                   end loop;
@@ -79,15 +68,13 @@ package body Parser is
    end Parse_Expr;
 
    -------------------------------------------------------------
-   --  Statement Parser
+   -- Statement parsing
    -------------------------------------------------------------
    function Parse_Stmt return AST.Stmt is
       S : AST.Stmt;
       T : Lexer.Token := Peek;
    begin
-      ----------------------------------------------------------
       -- DISPLAY <expr>
-      ----------------------------------------------------------
       if T.Kind = Lexer.Ident
         and then To_String(T.Text) = "DISPLAY"
       then
@@ -95,9 +82,6 @@ package body Parser is
          S.Kind := AST.Display_Stmt;
          S.Expr_Node := Parse_Expr;
 
-      ----------------------------------------------------------
-      -- Fallback: treat as call-level stmt
-      ----------------------------------------------------------
       else
          S.Kind := AST.Call_Stmt;
          S.Expr_Node := Parse_Expr;
@@ -107,7 +91,7 @@ package body Parser is
    end Parse_Stmt;
 
    -------------------------------------------------------------
-   --  Program Parser
+   -- Program
    -------------------------------------------------------------
    function Parse_Program(Tokens : Lexer.Token_List) return Program_Type is
       P : AST.Program;

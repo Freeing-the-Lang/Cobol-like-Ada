@@ -1,0 +1,135 @@
+name: "Cobol-like-Ada — Build + ProofLedger + Auto Release"
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - "example.coba"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cobol-like-ada-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: "Build — ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # --------------------------------------
+      # Install Ada Compiler (GNAT)
+      # Ubuntu = OK / others = skip
+      # --------------------------------------
+      - name: Install GNAT (Ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt update
+          sudo apt install -y gnat
+
+      # --------------------------------------
+      # Build
+      # --------------------------------------
+      - name: Build Ada project
+        run: |
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            echo "Compiling Ada sources..."
+            gnat make src/main.adb -D src -o cobol_ada
+          else
+            echo "Skipping build on non-Ubuntu (GNAT unavailable)"
+          fi
+
+      # --------------------------------------
+      # Run example.coba
+      # --------------------------------------
+      - name: Run example on Ubuntu only
+        run: |
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            echo "Running Cobol-like-Ada example..."
+            ./cobol_ada > out-run.txt
+          else
+            echo "Skipping run"
+            echo "[Skipped] Non-Ubuntu" > out-run.txt
+          fi
+
+      # --------------------------------------
+      # Generate ProofLedger
+      # --------------------------------------
+      - name: Generate ProofLedger
+        run: |
+          echo "Repository: Cobol-like-Ada" >  proofledger-${{ matrix.os }}-${{ github.sha }}.txt
+          echo "Commit: ${{ github.sha }}" >> proofledger-${{ matrix.os }}-${{ github.sha }}.txt
+          echo "OS: ${{ matrix.os }}" >> proofledger-${{ matrix.os }}-${{ github.sha }}.txt
+          echo "Build Time: $(date)" >> proofledger-${{ matrix.os }}-${{ github.sha }}.txt
+          echo "Run Output: out-run.txt" >> proofledger-${{ matrix.os }}-${{ github.sha }}.txt
+
+      # --------------------------------------
+      # Upload artifacts
+      # --------------------------------------
+      - name: Upload run result
+        uses: actions/upload-artifact@v4
+        with:
+          name: out-run-${{ matrix.os }}
+          path: out-run.txt
+
+      - name: Upload ProofLedger
+        uses: actions/upload-artifact@v4
+        with:
+          name: proofledger-${{ matrix.os }}
+          path: proofledger-${{ matrix.os }}-${{ github.sha }}.txt
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobol-like-ada-${{ matrix.os }}
+          path: |
+            cobol_ada
+            cobol_ada.exe
+        continue-on-error: true
+
+
+  # --------------------------------------
+  # Auto Release only when src changes
+  # --------------------------------------
+  release:
+    name: "Publish Release"
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release_assets/
+
+      - name: Create Release Tag
+        id: tag
+        run: echo "TAG=v_${{ github.run_number }}" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.TAG }}
+          name: "Cobol-like-Ada Release ${{ env.TAG }}"
+          body: |
+            🚀 **Cobol-like-Ada 자동 릴리즈 — ${{ env.TAG }}**
+            - Ubuntu 빌드 성공
+            - ProofLedger 포함
+            - out-run 결과 포함
+            - 실행파일(리눅스) 포함
+            - macOS/Windows는 GNAT 미지원 → BUILD SKIPPED
+          files: release_assets/**/*
